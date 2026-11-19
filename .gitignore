@@ -22,3 +22,9 @@ outputs/
 .vscode/
 .idea/
 .DS_Store
+
+# Environnements et dépôts externes (jamais dans Git)
+fmae_env/
+temp_fmae_check/
+third_party/
+fmae_test_outputs/
