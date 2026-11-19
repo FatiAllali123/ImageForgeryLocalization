@@ -16,3 +16,13 @@ def test_unavailable_when_checkpoint_missing(monkeypatch, tmp_path):
     ok, message = FMAEModel().is_available()
     assert ok is False
     assert "absent.pth" in message
+
+
+
+
+def test_load_refuses_when_unavailable(monkeypatch, tmp_path):
+    # Si un fichier manque, load() doit lever une erreur claire (pas un crash obscur)
+    import pytest
+    monkeypatch.setattr(cfg, "CHECKPOINT_PATH", tmp_path / "absent.pth")
+    with pytest.raises(RuntimeError, match="indisponible"):
+        FMAEModel().load()

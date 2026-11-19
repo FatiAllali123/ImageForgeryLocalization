@@ -6,6 +6,9 @@ third_party/FMAE (voir config.py). Ce fichier ne fait que l'adapter.
 from __future__ import annotations
 
 import importlib.util
+import os
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +26,20 @@ def _short(path: Path) -> str:
         return str(path.relative_to(cfg.PROJECT_ROOT))
     except ValueError:
         return str(path)
+
+
+def _prepare_official_imports() -> None:
+    """Rend le code officiel importable, SANS le modifier."""
+    # 1. Le code officiel importe 'jpegio' (utile seulement pour lire des
+    #    coefficients JPEG, inutile à l'inférence). S'il n'est pas installé,
+    #    on fournit un module vide pour que l'import réussisse.
+    if "jpegio" not in sys.modules and importlib.util.find_spec("jpegio") is None:
+        sys.modules["jpegio"] = types.ModuleType("jpegio")
+
+    # 2. Le dossier du code officiel doit être dans le chemin d'import
+    repo = str(cfg.FMAE_REPO_DIR)
+    if repo not in sys.path:
+        sys.path.insert(0, repo)
 
 
 class FMAEModel(BaseForgeryModel):
@@ -55,7 +72,61 @@ class FMAEModel(BaseForgeryModel):
         return True, ""
 
     def load(self) -> None:
-        raise NotImplementedError("load() sera écrit à l'étape suivante")
+        """Charge FMAE une seule fois (GPU si disponible, sinon CPU)."""
+        if self._model is not None:
+            return  # déjà chargé
+
+        ok, message = self.is_available()
+        if not ok:
+            raise RuntimeError(f"FMAE indisponible : {message}")
+
+        import torch  # import tardif : seulement quand on charge vraiment
+
+        _prepare_official_imports()
+        from IMDLBenCo import MODELS  # code officiel (third_party/FMAE)
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Construction du modèle. MoE.py charge noiseprint.pth avec un chemin
+        # RELATIF : on se place temporairement dans le dossier du code officiel,
+        # puis on revient TOUJOURS au dossier d'origine (finally).
+        previous_dir = os.getcwd()
+        try:
+            os.chdir(cfg.FMAE_REPO_DIR)
+            model = MODELS.get("FMAE")(vit_pretrain_path=str(cfg.MAE_PRETRAIN_PATH))
+        finally:
+            os.chdir(previous_dir)
+
+        # Checkpoint de localisation. weights_only=False exécute du code pickle :
+        # acceptable ici car c'est le fichier officiel, de source connue.
+        checkpoint = torch.load(cfg.CHECKPOINT_PATH, map_location="cpu", weights_only=False)
+        model.load_state_dict(checkpoint["model"], strict=True)
+
+        try:
+            model.to(device)
+        except torch.cuda.OutOfMemoryError as exc:
+            del model
+            torch.cuda.empty_cache()
+            raise RuntimeError(
+                "Mémoire GPU insuffisante pour charger FMAE. "
+                "Fermez les autres applications utilisant le GPU."
+            ) from exc
+
+        model.eval()  # mode inférence (obligatoire)
+
+        self._model = model
+        self._device = device
+        self._epoch = int(checkpoint["epoch"])
+
+    def unload(self) -> None:
+        """Libère la mémoire (pour ne garder qu'un modèle à la fois)."""
+        self._model = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
     def predict(self, image_rgb: np.ndarray, threshold: float | None = None) -> PredictionResult:
         raise NotImplementedError("predict() sera écrit à l'étape suivante")
