@@ -1,0 +1,24 @@
+# Environnement virtuel
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Poids des modèles (trop lourds pour Git)
+weights/**/*.pth
+weights/**/*.pt
+weights/**/*.ckpt
+weights/**/*.bin
+weights/**/*.safetensors
+
+# Sorties temporaires
+uploads/
+outputs/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
