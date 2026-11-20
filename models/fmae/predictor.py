@@ -8,16 +8,21 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import time
 import types
 from pathlib import Path
 
 import numpy as np
 
-from models.base_model import BaseForgeryModel, PredictionResult
+from models.base_model import BaseForgeryModel, PredictionResult, binarize
 from models.fmae import config as cfg
 
 # Paquets nécessaires à FMAE (vérifiés sans les importer : c'est rapide)
 _REQUIRED_PACKAGES = ("torch", "timm", "einops", "albumentations", "cv2")
+
+# Arguments de forward() lus dans inference.py officiel. Ils ne servent qu'au
+# calcul de la loss (inutile en inférence) : on garde les valeurs officielles.
+_LOSS_WEIGHTS = {"alpha": 0.3, "beta": 0.7, "gamma": 0}
 
 
 def _short(path: Path) -> str:
@@ -129,4 +134,79 @@ class FMAEModel(BaseForgeryModel):
             pass
 
     def predict(self, image_rgb: np.ndarray, threshold: float | None = None) -> PredictionResult:
-        raise NotImplementedError("predict() sera écrit à l'étape suivante")
+        """Analyse une image RGB (H, W, 3) uint8 et retourne un PredictionResult."""
+        self._validate_image(image_rgb)
+        threshold = self.default_threshold if threshold is None else threshold
+
+        if self._model is None:
+            self.load()
+
+        import cv2
+        import torch
+
+        _prepare_official_imports()
+        from IMDLBenCo.transforms import get_albu_transforms  # code officiel
+
+        height, width = image_rgb.shape[:2]
+
+        # 1. Prétraitement OFFICIEL : Resize 512x512 + normalisation ImageNet.
+        #    Le masque nul est exigé par l'interface albumentations du code
+        #    officiel (comme dans notre script de test).
+        transform = get_albu_transforms(
+            type_="resize", output_size=(cfg.IMAGE_SIZE, cfg.IMAGE_SIZE)
+        )
+        zero_mask = np.zeros((height, width), dtype=np.uint8)
+        transformed = transform(image=image_rgb, masks=[zero_mask])
+
+        # 2. Inférence
+        device = self._device
+        try:
+            image_tensor = transformed["image"].unsqueeze(0).to(device)
+            mask_tensor = transformed["masks"][0].float().unsqueeze(0).unsqueeze(0).to(device)
+            label_tensor = torch.zeros((1,), dtype=torch.float32, device=device)
+
+            if device == "cuda":
+                torch.cuda.synchronize()    # attendre la fin des tâches GPU en cours
+            start = time.perf_counter()
+            with torch.inference_mode():
+                output = self._model(
+                    image=image_tensor,
+                    mask=mask_tensor,
+                    edge_mask=None,
+                    label=label_tensor,
+                    epoch=self._epoch,
+                    **_LOSS_WEIGHTS,
+                )
+            if device == "cuda":
+                torch.cuda.synchronize()    # sinon le chronomètre s'arrête trop tôt
+            elapsed = time.perf_counter() - start
+        except torch.cuda.OutOfMemoryError as exc:
+            torch.cuda.empty_cache()
+            raise RuntimeError(
+                "Mémoire GPU insuffisante pendant l'analyse. "
+                "Fermez les autres applications utilisant le GPU."
+            ) from exc
+
+        # 3. Post-traitement : carte (512x512) -> taille d'origine, valeurs dans [0, 1]
+        prediction = output["pred_mask"][0, 0].detach().cpu().numpy()
+        heatmap = cv2.resize(prediction, (width, height), interpolation=cv2.INTER_LINEAR)
+        heatmap = np.clip(heatmap, 0.0, 1.0).astype(np.float32)
+
+        # 4. Masque binaire : le seuil est un réglage (le modèle n'en impose pas)
+        mask = binarize(heatmap, threshold)
+
+        return PredictionResult(
+            model_name=self.name,
+            heatmap=heatmap,
+            mask=mask,
+            inference_time_s=elapsed,
+            device=self._device,
+            threshold=threshold,
+            detection_score=None,       # checkpoint de LOCALISATION : pas de score fiable
+            score_description=None,
+            extra={
+                "epoch": self._epoch,
+                "input_size": cfg.IMAGE_SIZE,
+                "original_size": (height, width),
+            },
+        )
