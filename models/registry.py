@@ -6,11 +6,14 @@ from collections.abc import Callable
 
 from models.base_model import BaseForgeryModel
 from models.dummy.predictor import DummyModel
+from models.fmae.predictor import FMAEModel
 
 # nom affiché -> fonction qui crée le modèle.
-# FMAE et TruFor seront ajoutés ici aux étapes suivantes.
+# Dummy reste en premier : certains tests s'appuient sur list_models()[0].
+# TruFor sera ajouté ici quand son adaptateur sera validé.
 _FACTORIES: dict[str, Callable[[], BaseForgeryModel]] = {
     DummyModel.name: DummyModel,
+    FMAEModel.name: FMAEModel,
 }
 
 

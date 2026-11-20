@@ -68,3 +68,12 @@ def test_higher_threshold_gives_smaller_or_equal_area(loaded_model):
     low = loaded_model.predict(image, threshold=0.2).suspicious_area_percent
     high = loaded_model.predict(image, threshold=0.8).suspicious_area_percent
     assert low >= high
+
+
+
+
+def test_fmae_is_registered():
+    from models.registry import create_model, list_models
+
+    assert "FMAE" in list_models()
+    assert isinstance(create_model("FMAE"), FMAEModel)
