@@ -9,7 +9,8 @@ from components.results_view import show_results
 from components.sidebar import render_sidebar
 from components.uploader import render_uploader
 from models.base_model import binarize
-from models.registry import create_model, list_models
+from models.registry import list_models
+from services.inference_service import ModelUnavailableError, get_manager
 
 st.set_page_config(
     page_title="Détection de falsifications d'images",
@@ -33,24 +34,25 @@ else:
     model_name = st.selectbox("② Choisir le modèle", list_models())
 
     if st.button("③ Analyser", type="primary"):
-        model = create_model(model_name)
-        available, message = model.is_available()
-
-        if not available:
-            st.error(f"Modèle indisponible : {message}")
+        try:
+            with st.spinner(
+                "Analyse en cours... (le premier chargement d'un modèle "
+                "peut prendre une quinzaine de secondes)"
+            ):
+                # Le gestionnaire charge le modèle une seule fois et le garde en mémoire
+                result = get_manager().analyze(model_name, image, threshold)
+        except ModelUnavailableError as e:
+            st.session_state.pop("analysis", None)
+            st.error(f"Modèle indisponible : {e}")
+        except Exception as e:
+            st.session_state.pop("analysis", None)
+            st.error(f"Erreur pendant l'analyse : {e}")
         else:
-            try:
-                with st.spinner("Analyse en cours..."):
-                    model.load()
-                    result = model.predict(image, threshold=threshold)
-            except Exception as e:
-                st.error(f"Erreur pendant l'analyse : {e}")
-            else:
-                # On garde le résultat (pas l'image) pour les prochaines relances
-                st.session_state["analysis"] = {
-                    "image_id": image_id,
-                    "result": result,
-                }
+            # On garde le résultat (pas l'image) pour les prochaines relances
+            st.session_state["analysis"] = {
+                "image_id": image_id,
+                "result": result,
+            }
 
     # 3. Affichage : hors du bloc du bouton, donc visible à chaque relance
     analysis = st.session_state.get("analysis")
