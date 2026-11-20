@@ -58,30 +58,30 @@ def show_results(image_rgb, result):
         st.image(
             image_rgb,
             caption="1. Image originale",
-            use_container_width=True,
+            width="stretch",
         )
         st.image(
             heatmap_rgb,
             caption="2. Heatmap - zones suspectes",
-            use_container_width=True,
+            width="stretch",
         )
 
     with col2:
         st.image(
             mask,
             caption="3. Masque binaire",
-            use_container_width=True,
+            width="stretch",
         )
         st.image(
             heatmap_overlay,
             caption="4. Image avec heatmap",
-            use_container_width=True,
+            width="stretch",
         )
 
     st.image(
         mask_overlay,
         caption="Superposition du masque sur l'image originale",
-        use_container_width=True,
+        width="stretch",
     )
 
     # 4. Téléchargement des résultats
@@ -95,7 +95,7 @@ def show_results(image_rgb, result):
             data=to_png_bytes(heatmap_rgb),
             file_name="heatmap.png",
             mime="image/png",
-            use_container_width=True,
+            width="stretch",
         )
 
     with col2:
@@ -104,7 +104,7 @@ def show_results(image_rgb, result):
             data=to_png_bytes(mask),
             file_name="mask.png",
             mime="image/png",
-            use_container_width=True,
+            width="stretch",
         )
 
     with col3:
@@ -113,5 +113,5 @@ def show_results(image_rgb, result):
             data=to_png_bytes(mask_overlay),
             file_name="overlay.png",
             mime="image/png",
-            use_container_width=True,
+            width="stretch",
         )
