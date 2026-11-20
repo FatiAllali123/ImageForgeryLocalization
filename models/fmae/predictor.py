@@ -4,7 +4,8 @@ Le code officiel de FMAE n'est jamais copié ni modifié : il est lu dans
 third_party/FMAE (voir config.py). Ce fichier ne fait que l'adapter.
 """
 from __future__ import annotations
-
+import gc
+import importlib.util
 import importlib.util
 import os
 import sys
@@ -124,14 +125,19 @@ class FMAEModel(BaseForgeryModel):
         self._epoch = int(checkpoint["epoch"])
 
     def unload(self) -> None:
-        """Libère la mémoire (pour ne garder qu'un modèle à la fois)."""
-        self._model = None
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+            """Libère la mémoire (pour ne garder qu'un modèle à la fois)."""
+            self._model = None
+            gc.collect()    # détruit réellement les tenseurs AVANT de vider le cache CUDA
+            try:
+                import torch
+                if torch.cuda.is_available():
+                  torch.cuda.empty_cache()
+            except ImportError:
+                pass
+
+    
+
+    
 
     def predict(self, image_rgb: np.ndarray, threshold: float | None = None) -> PredictionResult:
         """Analyse une image RGB (H, W, 3) uint8 et retourne un PredictionResult."""
