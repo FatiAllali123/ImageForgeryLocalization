@@ -77,3 +77,21 @@ def test_fmae_is_registered():
 
     assert "FMAE" in list_models()
     assert isinstance(create_model("FMAE"), FMAEModel)
+
+
+
+def test_torch_load_defaults_to_cpu_then_is_restored(monkeypatch):
+    import torch
+    from models.fmae.predictor import _torch_load_defaults_to_cpu
+
+    calls = []
+    monkeypatch.setattr(torch, "load", lambda *a, **k: calls.append(k))
+    recorder = torch.load
+
+    with _torch_load_defaults_to_cpu():
+        torch.load("fichier.pth")                       # appel sans map_location
+        torch.load("autre.pth", map_location="cuda")    # un choix explicite est respecté
+
+    assert calls[0]["map_location"] == "cpu"
+    assert calls[1]["map_location"] == "cuda"
+    assert torch.load is recorder                       # fonction d'origine restaurée
