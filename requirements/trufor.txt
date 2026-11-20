@@ -1,0 +1,9 @@
+-r base.txt
+
+# PyTorch et torchvision sont installés séparément
+# selon la plateforme (CPU ou CUDA).
+
+timm==0.9.16
+tqdm==4.70.1
+yacs==0.1.8
+PyYAML==6.0.3
