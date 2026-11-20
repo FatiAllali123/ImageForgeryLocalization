@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import gc
 import sys
 import time
 from types import SimpleNamespace
@@ -75,6 +76,13 @@ class TruForModel(BaseForgeryModel):
         finally:
             os.chdir(previous_directory)
 
+    def unload(self) -> None:
+        """Libère la mémoire (un seul modèle à la fois sur le GPU)."""
+        self.model = None
+        gc.collect()    # détruit les tenseurs AVANT de vider le cache CUDA
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    
     def predict(
         self,
         image_rgb: np.ndarray,
