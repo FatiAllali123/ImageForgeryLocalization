@@ -139,7 +139,10 @@ class TruForModel(BaseForgeryModel):
             device=self.device,
             threshold=threshold,
             detection_score=detection_score,
-            score_description="Score global de détection TruFor",
+                        score_description=(
+                "Score du modèle (élevé = plutôt falsifiée). "
+                "Ce n'est pas une probabilité calibrée."
+            ),
             extra={
                 "confidence_map": confidence_map,
             },
