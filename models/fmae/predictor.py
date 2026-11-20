@@ -4,13 +4,14 @@ Le code officiel de FMAE n'est jamais copié ni modifié : il est lu dans
 third_party/FMAE (voir config.py). Ce fichier ne fait que l'adapter.
 """
 from __future__ import annotations
+
 import gc
-import importlib.util
 import importlib.util
 import os
 import sys
 import time
 import types
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +47,30 @@ def _prepare_official_imports() -> None:
     repo = str(cfg.FMAE_REPO_DIR)
     if repo not in sys.path:
         sys.path.insert(0, repo)
+
+
+@contextmanager
+def _torch_load_defaults_to_cpu():
+    """Pendant la construction du modèle, torch.load lit sur le CPU par défaut.
+
+    Le code officiel (MoE.py) appelle torch.load(path) sans map_location : sur
+    une machine sans GPU, la lecture de noiseprint.pth échoue. On n'édite pas
+    le code officiel : on ajoute map_location="cpu" uniquement quand l'appelant
+    n'en donne pas, puis on RESTAURE toujours la fonction d'origine.
+    """
+    import torch
+
+    original = torch.load
+
+    def patched(*args, **kwargs):
+        kwargs.setdefault("map_location", "cpu")
+        return original(*args, **kwargs)
+
+    torch.load = patched
+    try:
+        yield
+    finally:
+        torch.load = original
 
 
 class FMAEModel(BaseForgeryModel):
@@ -96,10 +121,12 @@ class FMAEModel(BaseForgeryModel):
         # Construction du modèle. MoE.py charge noiseprint.pth avec un chemin
         # RELATIF : on se place temporairement dans le dossier du code officiel,
         # puis on revient TOUJOURS au dossier d'origine (finally).
+        # Il le lit aussi sans map_location : voir _torch_load_defaults_to_cpu().
         previous_dir = os.getcwd()
         try:
             os.chdir(cfg.FMAE_REPO_DIR)
-            model = MODELS.get("FMAE")(vit_pretrain_path=str(cfg.MAE_PRETRAIN_PATH))
+            with _torch_load_defaults_to_cpu():
+                model = MODELS.get("FMAE")(vit_pretrain_path=str(cfg.MAE_PRETRAIN_PATH))
         finally:
             os.chdir(previous_dir)
 
@@ -125,19 +152,15 @@ class FMAEModel(BaseForgeryModel):
         self._epoch = int(checkpoint["epoch"])
 
     def unload(self) -> None:
-            """Libère la mémoire (pour ne garder qu'un modèle à la fois)."""
-            self._model = None
-            gc.collect()    # détruit réellement les tenseurs AVANT de vider le cache CUDA
-            try:
-                import torch
-                if torch.cuda.is_available():
-                  torch.cuda.empty_cache()
-            except ImportError:
-                pass
-
-    
-
-    
+        """Libère la mémoire (pour ne garder qu'un modèle à la fois)."""
+        self._model = None
+        gc.collect()    # détruit réellement les tenseurs AVANT de vider le cache CUDA
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
     def predict(self, image_rgb: np.ndarray, threshold: float | None = None) -> PredictionResult:
         """Analyse une image RGB (H, W, 3) uint8 et retourne un PredictionResult."""
