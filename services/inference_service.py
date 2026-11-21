@@ -19,7 +19,9 @@ from models.registry import create_model
 class ModelUnavailableError(RuntimeError):
     """Le modèle demandé ne peut pas être utilisé (poids ou paquets manquants...)."""
 
-
+class ImageTooLargeError(ValueError):
+    """L'image dépasse la taille maximale supportée par le modèle."""
+    
 class ModelManager:
     """Charge un modèle une seule fois et le garde en mémoire."""
 
@@ -61,12 +63,24 @@ class ModelManager:
         self._model, self._name = model, name
         return model
 
+
+
     def analyze(
         self, name: str, image_rgb: np.ndarray, threshold: float | None = None
     ) -> PredictionResult:
         """Charge le modèle si nécessaire, puis analyse l'image."""
         with self._lock:
             model = self._get_loaded_model(name)
+
+            # Garde-fou : certains modèles (TruFor) ne redimensionnent pas l'image
+            limit = getattr(model, "max_pixels", None)
+            height, width = getattr(image_rgb, "shape", (0, 0))[:2]
+            if limit is not None and height * width > limit:
+                raise ImageTooLargeError(
+                    f"Image trop grande pour {name} : {height * width / 1e6:.1f} Mpx "
+                    f"(maximum {limit / 1e6:.1f} Mpx). "
+                    "Utilisez une image plus petite ou le modèle FMAE."
+                )
             return model.predict(image_rgb, threshold=threshold)
 
 

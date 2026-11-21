@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from models.base_model import BaseForgeryModel, PredictionResult, binarize
-from services.inference_service import ModelManager, ModelUnavailableError
+from services.inference_service import ImageTooLargeError, ModelManager, ModelUnavailableError
 
 
 class FakeModel(BaseForgeryModel):
@@ -88,3 +88,16 @@ def test_failed_load_leaves_nothing_loaded(manager, events):
         manager.analyze("Crash", IMAGE)
     assert manager.current_model_name is None
     assert "unload:Crash" in events              # nettoyage effectué
+
+
+def test_image_larger_than_model_limit_is_refused(events):
+    class Limited(FakeModel):
+        max_pixels = 100                      # 100 pixels maximum
+
+    manager = ModelManager(factory=lambda name: Limited(name, events))
+    with pytest.raises(ImageTooLargeError, match="trop grande"):
+        manager.analyze("A", IMAGE)           # IMAGE = 20 x 30 = 600 pixels
+    assert "predict:A" not in events          # le modèle n'a pas été exécuté
+
+    small = np.zeros((5, 5, 3), dtype=np.uint8)
+    assert manager.analyze("A", small).model_name == "A"
