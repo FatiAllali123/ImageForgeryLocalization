@@ -57,7 +57,9 @@ def test_predict_respects_contract(loaded_model):
     assert set(np.unique(result.mask)) <= {0, 1}
     assert result.inference_time_s > 0
     assert result.device in ("cpu", "cuda")
-    assert result.detection_score is None
+    assert result.detection_score is not None
+    assert 0.0 <= result.detection_score <= 1.0
+    assert result.score_description
 
 
 @pytest.mark.skipif(not _available, reason="FMAE indisponible (poids ou paquets manquants)")
@@ -95,3 +97,28 @@ def test_torch_load_defaults_to_cpu_then_is_restored(monkeypatch):
     assert calls[0]["map_location"] == "cpu"
     assert calls[1]["map_location"] == "cuda"
     assert torch.load is recorder                       # fonction d'origine restaurée
+
+
+
+@pytest.mark.skipif(not _available, reason="FMAE indisponible (poids ou paquets manquants)")
+def test_predict_exposes_pred_label_as_score():
+    import torch
+
+    class FakeNet:
+        """Imite la sortie de FMAE.forward : pred_mask (1,1,512,512) et pred_label (1,)."""
+        def __call__(self, **kwargs):
+            return {
+                "pred_mask": torch.full((1, 1, 512, 512), 0.1),
+                "pred_label": torch.tensor([0.58]),
+            }
+
+    model = FMAEModel()
+    model._model = FakeNet()
+    model._device = "cpu"
+    model._epoch = 25
+
+    image = np.zeros((64, 64, 3), dtype=np.uint8)
+    result = model.predict(image, threshold=0.5)
+
+    assert result.detection_score == pytest.approx(0.58)
+    assert result.heatmap.shape == (64, 64)
