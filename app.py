@@ -8,7 +8,7 @@ import streamlit as st
 from components.model_choices import visible_models
 from components.results_view import show_results
 from components.sidebar import render_sidebar
-from components.style import inject_css, render_hero
+from components.style import inject_css, render_hero, render_section
 from components.uploader import render_uploader
 from models.base_model import binarize
 from services.inference_service import ModelUnavailableError, get_manager
@@ -24,8 +24,11 @@ render_hero()
 # 1. Paramètres et import de l'image
 threshold = render_sidebar()
 
-with st.container(border=True):
-    st.subheader("① Importer l'image")
+# Repère vers lequel le bouton « Commencer l'analyse » fait défiler la page
+st.markdown('<div id="import"></div>', unsafe_allow_html=True)
+
+with st.container(border=True, key="card_import"):
+    render_section("Étape 1", "Importer", "l'image")
     image, filename = render_uploader()
 
 if image is None:
@@ -42,8 +45,8 @@ else:
         st.stop()
 
     # 2. Sélection du modèle et analyse
-    with st.container(border=True):
-        st.subheader("② Choisir le modèle et analyser")
+    with st.container(border=True, key="card_model"):
+        render_section("Étapes 2 et 3", "Choisir le modèle", "et analyser")
         col_model, col_button = st.columns([3, 1], vertical_alignment="bottom")
         with col_model:
             model_name = st.selectbox("Modèle", models)
