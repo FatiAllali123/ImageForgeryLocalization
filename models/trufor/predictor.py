@@ -19,6 +19,10 @@ from models.trufor.config import TRUFOR_ROOT, TRUFOR_WEIGHTS, DEVICE
 
 class TruForModel(BaseForgeryModel):
     name = "TruFor"
+    # Limite mesurée sur Quadro T1000 (4 Go) : 1,7 Mpx = 4 s ; 3 Mpx = 12 s avec
+    # débordement mémoire ; 8 Mpx = plantage. TruFor ne redimensionne pas l'image.
+    max_pixels = 2_000_000
+    
     default_threshold = 0.5
 
     def __init__(self):

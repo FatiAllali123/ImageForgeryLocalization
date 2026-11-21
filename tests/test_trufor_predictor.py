@@ -23,3 +23,7 @@ def test_trufor_predict_refuses_before_load():
     image = np.zeros((32, 32, 3), dtype=np.uint8)
     with pytest.raises(RuntimeError):
         model.predict(image)
+
+
+def test_trufor_declares_a_size_limit():
+    assert TruForModel.max_pixels is not None
