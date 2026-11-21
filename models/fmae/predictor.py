@@ -220,6 +220,16 @@ class FMAEModel(BaseForgeryModel):
         prediction = output["pred_mask"][0, 0].detach().cpu().numpy()
         heatmap = cv2.resize(prediction, (width, height), interpolation=cv2.INTER_LINEAR)
         heatmap = np.clip(heatmap, 0.0, 1.0).astype(np.float32)
+        
+        # Sortie globale (tête ConvGEM), lue telle que le modèle la fournit :
+        # dans [0, 1] (sigmoïde + pooling GeM), entraînée avec 1 = falsifiée.
+        # On n'affiche rien si la valeur est absente ou hors de [0, 1].
+        detection_score = None
+        raw_label = output.get("pred_label")
+        if raw_label is not None:
+            value = float(raw_label.detach().cpu().reshape(-1)[0])
+            if np.isfinite(value) and 0.0 <= value <= 1.0:
+                detection_score = value
 
         # 4. Masque binaire : le seuil est un réglage (le modèle n'en impose pas)
         mask = binarize(heatmap, threshold)
@@ -231,8 +241,13 @@ class FMAEModel(BaseForgeryModel):
             inference_time_s=elapsed,
             device=self._device,
             threshold=threshold,
-            detection_score=None,       # checkpoint de LOCALISATION : pas de score fiable
-            score_description=None,
+            detection_score=detection_score,
+            score_description=(
+                "Sortie globale brute de FMAE (élevé = plutôt falsifiée). "
+                "Non calibrée : sur 60 images IMD2020 (AUC ≈ 0,60), elle sépare "
+                "mal les images authentiques et falsifiées. "
+                "La localisation reste le résultat principal."
+            ),
             extra={
                 "epoch": self._epoch,
                 "input_size": cfg.IMAGE_SIZE,
