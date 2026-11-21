@@ -5,11 +5,12 @@ from dataclasses import replace
 
 import streamlit as st
 
+from components.model_choices import visible_models
 from components.results_view import show_results
 from components.sidebar import render_sidebar
+from components.style import inject_css, render_hero, render_section
 from components.uploader import render_uploader
 from models.base_model import binarize
-from models.registry import list_models
 from services.inference_service import ModelUnavailableError, get_manager
 
 st.set_page_config(
@@ -17,23 +18,42 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Détection et localisation de falsifications d'images")
+inject_css()
+render_hero()
 
 # 1. Paramètres et import de l'image
 threshold = render_sidebar()
-image, filename = render_uploader()
+
+# Repère vers lequel le bouton « Commencer l'analyse » fait défiler la page
+st.markdown('<div id="import"></div>', unsafe_allow_html=True)
+
+with st.container(border=True, key="card_import"):
+    render_section("Étape 1", "Importer", "l'image")
+    image, filename = render_uploader()
 
 if image is None:
     # Plus d'image valide : on oublie l'ancien résultat
     st.session_state.pop("analysis", None)
+    st.info("Importez une image JPG, JPEG ou PNG pour commencer l'analyse.")
 else:
     # Empreinte de l'image : permet de savoir si le résultat stocké lui correspond
     image_id = hashlib.md5(image.tobytes()).hexdigest()
 
-    # 2. Sélection du modèle et analyse
-    model_name = st.selectbox("② Choisir le modèle", list_models())
+    models = visible_models()
+    if not models:
+        st.warning("Aucun modèle n'est disponible pour le moment.")
+        st.stop()
 
-    if st.button("③ Analyser", type="primary"):
+    # 2. Sélection du modèle et analyse
+    with st.container(border=True, key="card_model"):
+        render_section("Étapes 2 et 3", "Choisir le modèle", "et analyser")
+        col_model, col_button = st.columns([3, 1], vertical_alignment="bottom")
+        with col_model:
+            model_name = st.selectbox("Modèle", models)
+        with col_button:
+            analyze = st.button("③ Analyser", type="primary", width="stretch")
+
+    if analyze:
         try:
             with st.spinner(
                 "Analyse en cours... (le premier chargement d'un modèle "
