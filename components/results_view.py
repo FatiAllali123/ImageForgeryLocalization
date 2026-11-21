@@ -11,6 +11,8 @@ from services.visualization import (
     to_png_bytes,
 )
 
+DEFAULT_SCORE_HELP = "Indice fourni par le modèle : ce n'est pas une probabilité calibrée."
+
 
 def show_results(image_rgb, result):
     """Affiche les résultats de la prédiction."""
@@ -33,9 +35,9 @@ def show_results(image_rgb, result):
     columns[2].metric("Zone suspecte", f"{result.suspicious_area_percent:.2f} %", border=True)
     if has_score:
         columns[3].metric(
-            result.score_description or "Score de détection",
+            "Score du modèle",
             f"{result.detection_score:.4f}",
-            help="Indice fourni par le modèle : ce n'est pas une probabilité calibrée.",
+            help=result.score_description or DEFAULT_SCORE_HELP,
             border=True,
         )
 
