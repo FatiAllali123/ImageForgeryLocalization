@@ -71,7 +71,8 @@ class BaseForgeryModel(ABC):
 
     name: str = "base"                       # nom affiché dans l'interface
     default_threshold: float | None = 0.5    # seuil par défaut
-
+    max_pixels: int | None = None            # taille max acceptée (None = aucune limite)
+    
     @abstractmethod
     def is_available(self) -> tuple[bool, str]:
         """Dit si le modèle est utilisable (poids présents, dépendances...).
